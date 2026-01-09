@@ -1,0 +1,25 @@
+# Copyright 2024 Defense Unicorns
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Defense-Unicorns-Commercial
+
+kind: ZarfPackageConfig
+metadata:
+  name: values-pkg
+  description: Test package for Zarf values feature
+  version: 0.0.1
+
+# New Zarf values feature (alpha)
+values:
+  files:
+    - values/values.yaml
+
+components:
+  - name: values-test
+    required: true
+    actions:
+      onDeploy:
+        after:
+          - cmd: |
+              echo "app.name from values: {{ .Values.app.name }}"
+              echo "app.environment from values: {{ .Values.app.environment }}"
+              echo "app.replicas from values: {{ .Values.app.replicas }}"
+            template: true

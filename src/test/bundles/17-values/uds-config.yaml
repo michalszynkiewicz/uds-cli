@@ -1,0 +1,15 @@
+# UDS config for values test bundle
+options:
+  log_level: debug
+
+# Variables that map to values.variables
+variables:
+  values-pkg:
+    APP_NAME: "config-override-app"
+    REPLICAS: "5"
+
+# Direct values configuration (highest precedence)
+values:
+  values-pkg:
+    set:
+      .app.environment: "staging"

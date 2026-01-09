@@ -110,6 +110,18 @@ func deployPackages(ctx context.Context, packagesToDeploy []types.Package, b *Bu
 			return err
 		}
 
+		// Load Zarf values for packages using the values feature
+		// NOTE: Zarf's value.Values is an internal type that cannot be accessed from external packages.
+		// Until Zarf exports this type publicly, we log the loaded values for debugging purposes.
+		// The values are still processed and can be used once Zarf provides public access.
+		zarfValues, err := b.loadPackageValues(ctx, pkg, pkgVars)
+		if err != nil {
+			return err
+		}
+		if len(zarfValues) > 0 {
+			message.Debugf("Loaded Zarf values for package %s: %v", pkg.Name, zarfValues)
+		}
+
 		remoteOpts := packager.RemoteOptions{
 			PlainHTTP:             config.CommonOptions.Insecure,
 			InsecureSkipTLSVerify: config.CommonOptions.Insecure,
@@ -145,6 +157,12 @@ func deployPackages(ctx context.Context, packagesToDeploy []types.Package, b *Bu
 			StorageClass:           newStorageClass(pkgVars, pkgLayout.Pkg.Kind),
 			IsInteractive:          !config.CommonOptions.Confirm,
 		}
+
+		// TODO: Pass zarfValues to DeployOptions once Zarf exports the value.Values type publicly.
+		// Currently, value.Values is an internal package that cannot be accessed.
+		// See: https://github.com/zarf-dev/zarf/src/internal/value/value.go
+		// For now, the values are loaded but cannot be passed to Zarf's Deploy function.
+		_ = zarfValues
 
 		result, err := packager.Deploy(ctx, pkgLayout, deployOpts)
 		if err != nil {

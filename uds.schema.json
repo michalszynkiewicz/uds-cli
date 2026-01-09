@@ -122,6 +122,64 @@
         "^x-": {}
       }
     },
+    "PackageValues": {
+      "properties": {
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Paths to values YAML files to pass to the package (relative to bundle root)"
+        },
+        "set": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Values to set using dot notation paths (e.g. .app.replicas)"
+        },
+        "variables": {
+          "items": {
+            "$schema": "http://json-schema.org/draft-04/schema#",
+            "$ref": "#/definitions/BundleValuesVariable"
+          },
+          "type": "array",
+          "description": "Map UDS variables to Zarf values paths"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "patternProperties": {
+        "^x-": {}
+      }
+    },
+    "BundleValuesVariable": {
+      "required": [
+        "name",
+        "path"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "UDS variable name"
+        },
+        "path": {
+          "type": "string",
+          "description": "Dot notation path in Zarf values (e.g. .app.replicas)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the variable"
+        },
+        "default": {
+          "additionalProperties": true,
+          "description": "Default value if not provided"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "patternProperties": {
+        "^x-": {}
+      }
+    },
     "BundleVariableImport": {
       "required": [
         "name",
@@ -214,6 +272,11 @@
           },
           "type": "object",
           "description": "Map of Helm chart overrides to set. The format is <component>:"
+        },
+        "values": {
+          "$schema": "http://json-schema.org/draft-04/schema#",
+          "$ref": "#/definitions/PackageValues",
+          "description": "Values configuration for Zarf packages using the values feature (alpha)"
         }
       },
       "additionalProperties": false,

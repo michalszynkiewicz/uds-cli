@@ -1,0 +1,34 @@
+23# Copyright 2024 Defense Unicorns
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Defense-Unicorns-Commercial
+
+kind: UDSBundle
+metadata:
+  name: values-test
+  description: Bundle for testing Zarf values feature
+  version: 0.0.1
+
+
+# mstodo: we use bundle overrides for resource constraints
+packages:
+  - name: values-pkg
+    path: ../../packages/no-cluster/values-pkg
+    ref: 0.0.1
+
+    # Zarf values configuration
+    values:
+      # Override values via files
+      files:
+        - values/bundle-overrides.yaml
+
+      # Override individual values
+      set:
+        .app.environment: "production"
+
+      # Map UDS variables to zarf values paths
+      variables:
+        - name: APP_NAME
+          path: .app.name
+          default: "bundle-default-app"
+        - name: REPLICAS
+          path: .app.replicas
+          default: 3

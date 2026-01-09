@@ -1,0 +1,5 @@
+# Default values for the test package
+app:
+  name: "default-app"
+  environment: "development"
+  replicas: 1
