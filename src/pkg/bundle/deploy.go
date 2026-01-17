@@ -23,11 +23,13 @@ import (
 	"github.com/defenseunicorns/uds-cli/src/types/valuesources"
 	goyaml "github.com/goccy/go-yaml"
 	"github.com/zarf-dev/zarf/src/api/v1alpha1"
+	"github.com/zarf-dev/zarf/src/pkg/feature"
 	"github.com/zarf-dev/zarf/src/pkg/packager"
 	"github.com/zarf-dev/zarf/src/pkg/packager/filters"
 	"github.com/zarf-dev/zarf/src/pkg/state"
 	zarfState "github.com/zarf-dev/zarf/src/pkg/state"
 	zarfUtils "github.com/zarf-dev/zarf/src/pkg/utils"
+	"github.com/zarf-dev/zarf/src/pkg/value"
 	"golang.org/x/exp/slices"
 )
 
@@ -75,6 +77,13 @@ func (b *Bundle) Deploy(ctx context.Context) error {
 }
 
 func deployPackages(ctx context.Context, packagesToDeploy []types.Package, b *Bundle) error {
+	// Enable the Zarf Values feature for packages that use values
+	// This must be called once before deploying any packages
+	if err := feature.Set([]feature.Feature{{Name: feature.Values, Enabled: true}}); err != nil {
+		// Ignore error if features have already been set (e.g., by environment variable)
+		message.Debugf("Feature set note: %v", err)
+	}
+
 	// map of Zarf pkgs and their vars
 	bundleExportedVars := make(map[string]map[string]string)
 
@@ -111,10 +120,10 @@ func deployPackages(ctx context.Context, packagesToDeploy []types.Package, b *Bu
 		}
 
 		// Load Zarf values for packages using the values feature
-		// NOTE: Zarf's value.Values is an internal type that cannot be accessed from external packages.
-		// Until Zarf exports this type publicly, we log the loaded values for debugging purposes.
-		// The values are still processed and can be used once Zarf provides public access.
-		zarfValues, err := b.loadPackageValues(ctx, pkg, pkgVars)
+		// Use getValuesVariables to preserve complex object types (maps, arrays)
+		// rather than converting everything to strings
+		valuesVariables := getValuesVariables(variableData)
+		zarfValues, err := b.loadPackageValues(ctx, pkg, valuesVariables)
 		if err != nil {
 			return err
 		}
@@ -146,6 +155,7 @@ func deployPackages(ctx context.Context, packagesToDeploy []types.Package, b *Bu
 		deployOpts := packager.DeployOptions{
 			Timeout:                config.HelmTimeout,
 			SetVariables:           pkgVars,
+			Values:                 value.Values(zarfValues),
 			ValuesOverridesMap:     valuesOverrides,
 			Retries:                b.cfg.DeployOpts.Retries,
 			RemoteOptions:          remoteOpts,
@@ -157,12 +167,6 @@ func deployPackages(ctx context.Context, packagesToDeploy []types.Package, b *Bu
 			StorageClass:           newStorageClass(pkgVars, pkgLayout.Pkg.Kind),
 			IsInteractive:          !config.CommonOptions.Confirm,
 		}
-
-		// TODO: Pass zarfValues to DeployOptions once Zarf exports the value.Values type publicly.
-		// Currently, value.Values is an internal package that cannot be accessed.
-		// See: https://github.com/zarf-dev/zarf/src/internal/value/value.go
-		// For now, the values are loaded but cannot be passed to Zarf's Deploy function.
-		_ = zarfValues
 
 		result, err := packager.Deploy(ctx, pkgLayout, deployOpts)
 		if err != nil {

@@ -287,7 +287,7 @@ app:
 			},
 		}
 
-		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]string{})
+		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]interface{}{})
 		require.NoError(t, err)
 
 		app := vals["app"].(map[string]any)
@@ -319,16 +319,16 @@ app:
 		}
 
 		// Without UDS variable set, uses default from variables
-		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]string{})
+		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]interface{}{})
 		require.NoError(t, err)
 		app := vals["app"].(map[string]any)
 		require.Equal(t, 10, app["replicas"]) // from variables default, overrides set
 
-		// With UDS variable set
-		vals, err = b.loadPackageValues(t.Context(), pkg, map[string]string{"REPLICAS": "20"})
+		// With UDS variable set (integer preserved, not stringified)
+		vals, err = b.loadPackageValues(t.Context(), pkg, map[string]interface{}{"REPLICAS": 20})
 		require.NoError(t, err)
 		app = vals["app"].(map[string]any)
-		require.Equal(t, "20", app["replicas"]) // from UDS variable
+		require.Equal(t, 20, app["replicas"]) // from UDS variable, type preserved
 	})
 
 	t.Run("config values override bundle values", func(t *testing.T) {
@@ -359,7 +359,7 @@ app:
 			},
 		}
 
-		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]string{})
+		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]interface{}{})
 		require.NoError(t, err)
 
 		app := vals["app"].(map[string]any)
@@ -402,7 +402,7 @@ app:
 			},
 		}
 
-		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]string{})
+		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]interface{}{})
 		require.NoError(t, err)
 
 		app := vals["app"].(map[string]any)
@@ -431,8 +431,127 @@ func TestLoadPackageValuesNoConfig(t *testing.T) {
 			Values: nil, // no values configured
 		}
 
-		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]string{})
+		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]interface{}{})
 		require.NoError(t, err)
 		require.Empty(t, vals)
+	})
+}
+
+func TestLoadPackageValuesComplexObjects(t *testing.T) {
+	// Create a temporary directory for test files
+	tmpDir, err := os.MkdirTemp("", "values-complex-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	t.Run("complex object from variable is preserved", func(t *testing.T) {
+		b := &Bundle{
+			cfg: &types.BundleConfig{
+				DeployOpts: types.BundleDeployOptions{
+					Source: filepath.Join(tmpDir, "bundle.tar.zst"),
+				},
+			},
+		}
+
+		pkg := types.Package{
+			Name: "test-pkg",
+			Values: &types.PackageValues{
+				Variables: []types.BundleValuesVariable{
+					{Name: "RESOURCES", Path: ".app.resources"},
+				},
+			},
+		}
+
+		// Pass a complex object via variables (this is what happens when
+		// uds-config.yaml contains a complex object for a variable)
+		complexValue := map[string]interface{}{
+			"replicas": 3,
+			"limits": map[string]interface{}{
+				"cpu":    "500m",
+				"memory": "1Gi",
+			},
+		}
+
+		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]interface{}{
+			"RESOURCES": complexValue,
+		})
+		require.NoError(t, err)
+
+		// Verify the complex structure is preserved
+		app, ok := vals["app"].(map[string]any)
+		require.True(t, ok, "expected app to be a map")
+
+		resources, ok := app["resources"].(map[string]interface{})
+		require.True(t, ok, "expected resources to be a map, not a string")
+
+		require.Equal(t, 3, resources["replicas"])
+		limits, ok := resources["limits"].(map[string]interface{})
+		require.True(t, ok, "expected limits to be a map")
+		require.Equal(t, "500m", limits["cpu"])
+		require.Equal(t, "1Gi", limits["memory"])
+	})
+
+	t.Run("array from variable is preserved", func(t *testing.T) {
+		b := &Bundle{
+			cfg: &types.BundleConfig{
+				DeployOpts: types.BundleDeployOptions{
+					Source: filepath.Join(tmpDir, "bundle.tar.zst"),
+				},
+			},
+		}
+
+		pkg := types.Package{
+			Name: "test-pkg",
+			Values: &types.PackageValues{
+				Variables: []types.BundleValuesVariable{
+					{Name: "ADMIN_GROUPS", Path: ".sso.adminGroups"},
+				},
+			},
+		}
+
+		// Pass an array via variables
+		arrayValue := []interface{}{"/GitLab Admin", "/UDS Core/Admin"}
+
+		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]interface{}{
+			"ADMIN_GROUPS": arrayValue,
+		})
+		require.NoError(t, err)
+
+		// Verify the array is preserved
+		sso, ok := vals["sso"].(map[string]any)
+		require.True(t, ok, "expected sso to be a map")
+
+		adminGroups, ok := sso["adminGroups"].([]interface{})
+		require.True(t, ok, "expected adminGroups to be an array, not a string")
+		require.Len(t, adminGroups, 2)
+		require.Equal(t, "/GitLab Admin", adminGroups[0])
+		require.Equal(t, "/UDS Core/Admin", adminGroups[1])
+	})
+
+	t.Run("string variable still works", func(t *testing.T) {
+		b := &Bundle{
+			cfg: &types.BundleConfig{
+				DeployOpts: types.BundleDeployOptions{
+					Source: filepath.Join(tmpDir, "bundle.tar.zst"),
+				},
+			},
+		}
+
+		pkg := types.Package{
+			Name: "test-pkg",
+			Values: &types.PackageValues{
+				Variables: []types.BundleValuesVariable{
+					{Name: "APP_NAME", Path: ".app.name"},
+				},
+			},
+		}
+
+		vals, err := b.loadPackageValues(t.Context(), pkg, map[string]interface{}{
+			"APP_NAME": "my-app",
+		})
+		require.NoError(t, err)
+
+		app, ok := vals["app"].(map[string]any)
+		require.True(t, ok, "expected app to be a map")
+		require.Equal(t, "my-app", app["name"])
 	})
 }

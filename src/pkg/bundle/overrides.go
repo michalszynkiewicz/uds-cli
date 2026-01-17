@@ -90,6 +90,17 @@ func (b *Bundle) loadVariables(pkg types.Package, bundleExportedVars map[string]
 	return pkgVars, overVarsData
 }
 
+// getValuesVariables extracts variables with their original types preserved for use with Zarf values.
+// This is needed because loadVariables converts values to strings for legacy Zarf variable compatibility,
+// but Zarf values can accept complex objects (maps, arrays).
+func getValuesVariables(overrideData bOverridesData) map[string]interface{} {
+	result := make(map[string]interface{})
+	for name, data := range overrideData {
+		result[name] = data.value
+	}
+	return result
+}
+
 // loadChartOverrides converts a helm path to a ValuesOverridesMap config for Zarf
 func (b *Bundle) loadChartOverrides(pkg types.Package, overrideData bOverridesData) (packager.ValuesOverrides, NamespaceOverrideMap, error) {
 	// Create nested maps to hold the overrides
@@ -347,7 +358,7 @@ type ZarfValues map[string]any
 // 3. Bundle values.variables (with UDS variable resolution)
 // 4. Bundle values.set
 // 5. Bundle values.files
-func (b *Bundle) loadPackageValues(ctx context.Context, pkg types.Package, variables map[string]string) (ZarfValues, error) {
+func (b *Bundle) loadPackageValues(ctx context.Context, pkg types.Package, variables map[string]interface{}) (ZarfValues, error) {
 	result := make(ZarfValues)
 
 	// Skip if no values configured
@@ -380,6 +391,7 @@ func (b *Bundle) loadPackageValues(ctx context.Context, pkg types.Package, varia
 		}
 
 		// 3. Apply bundle values.variables (resolve from UDS variables)
+		// Values can be complex objects (maps, arrays) or simple values (strings, numbers)
 		for _, v := range pkg.Values.Variables {
 			varName := strings.ToUpper(v.Name)
 			var varValue interface{}
